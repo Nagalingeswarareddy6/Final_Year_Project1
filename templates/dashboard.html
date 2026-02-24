@@ -1,0 +1,413 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Blockchain QR Security System{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
+        <p>Welcome, {{ user_id }}! Manage your secure QR codes.</p>
+    </div>
+
+    <div class="page-note">
+        <i class="fas fa-lightbulb"></i>
+        <span>Best demo flow: Generate QR → Verify generated QR (valid) → Edit one character in content and verify again (invalid).</span>
+    </div>
+    
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <div class="card-header">
+                <i class="fas fa-qrcode"></i>
+                <h3>Generate QR Code</h3>
+            </div>
+            <div class="card-body">
+                <form id="generateQrForm">
+                    <div class="form-group">
+                        <label for="qrContent">Content to encode:</label>
+                        <textarea id="qrContent" name="content" rows="4" 
+                                  placeholder="Enter the content you want to encode in the QR code..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-qrcode"></i> Generate QR Code
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="dashboard-card">
+            <div class="card-header">
+                <i class="fas fa-search"></i>
+                <h3>Verify QR Code</h3>
+            </div>
+            <div class="card-body">
+                <form id="verifyQrForm">
+                    <div class="form-group">
+                        <label for="qrContentToVerify">QR Code Content:</label>
+                        <textarea id="qrContentToVerify" name="qr_content" rows="4" 
+                                  placeholder="Paste the QR code content to verify..."></textarea>
+                    </div>
+                    <button type="submit" id="verifyBtn" class="btn btn-primary">
+                        <i class="fas fa-check-circle"></i> Verify QR Code
+                    </button>
+                </form>
+                <div class="mini-actions">
+                    <button type="button" id="reverifyBtn" class="btn btn-outline btn-small">
+                        <i class="fas fa-rotate-right"></i> Re-Verify Edited Content
+                    </button>
+                    <button type="button" id="useLastGeneratedBtn" class="btn btn-outline btn-small">
+                        <i class="fas fa-paste"></i> Use Last Generated QR
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="dashboard-card">
+            <div class="card-header">
+                <i class="fas fa-link"></i>
+                <h3>Blockchain Status</h3>
+            </div>
+            <div class="card-body">
+                <div id="blockchainStatus">
+                    <button id="refreshBlockchain" class="btn btn-outline">
+                        <i class="fas fa-sync"></i> Refresh Status
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="dashboard-card">
+            <div class="card-header">
+                <i class="fas fa-info-circle"></i>
+                <h3>System Information</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-item">
+                    <strong>User ID:</strong> {{ user_id }}
+                </div>
+                <div class="info-item">
+                    <strong>Device ID:</strong> {{ device_id }}
+                </div>
+                <div class="info-item">
+                    <strong>Authentication:</strong> Multi-Factor Enabled
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="qrResult" class="qr-result" style="display: none;">
+        <div class="result-header">
+            <h3><i class="fas fa-qrcode"></i> Generated QR Code</h3>
+        </div>
+        <div class="result-body">
+            <div id="qrImage"></div>
+            <div class="qr-info">
+                <p><strong>QR ID:</strong> <span id="qrId"></span></p>
+                <p><strong>Generated:</strong> <span id="qrTimestamp"></span></p>
+                <p><strong>Image:</strong> <a id="qrImageLink" href="#" target="_blank" rel="noopener">Open QR Image</a></p>
+                <p><strong>Status:</strong> <span class="status-pending">Generated. Verify to confirm integrity.</span></p>
+                <div class="mini-actions">
+                    <button type="button" id="copyQrContentBtn" class="btn btn-outline btn-small">
+                        <i class="fas fa-copy"></i> Copy QR Content
+                    </button>
+                    <button type="button" id="sendToVerifyBtn" class="btn btn-outline btn-small">
+                        <i class="fas fa-arrow-right"></i> Send & Verify
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="verificationResult" class="verification-result" style="display: none;">
+        <div class="result-header">
+            <h3><i class="fas fa-check-circle"></i> Verification Result</h3>
+        </div>
+        <div class="result-body">
+            <div id="verificationDetails"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let lastGeneratedQrContent = '';
+
+function handleAuthRedirect(result) {
+    if (result && result.redirect_url) {
+        QRUtils.showNotification('Session expired. Redirecting to login...', 'error');
+        setTimeout(() => {
+            window.location.href = result.redirect_url;
+        }, 600);
+        return true;
+    }
+    return false;
+}
+
+function setLoading(button, loadingText, idleHtml, isLoading) {
+    button.disabled = isLoading;
+    button.innerHTML = isLoading ? loadingText : idleHtml;
+}
+
+function scrollToSection(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+async function copyTextReliable(text) {
+    if (!text) return false;
+
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (_) {}
+    }
+
+    try {
+        const helper = document.createElement('textarea');
+        helper.value = text;
+        helper.style.position = 'fixed';
+        helper.style.left = '-9999px';
+        document.body.appendChild(helper);
+        helper.focus();
+        helper.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(helper);
+        return copied;
+    } catch (_) {
+        return false;
+    }
+}
+
+document.getElementById('generateQrForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const content = document.getElementById('qrContent').value;
+    
+    if (!content.trim()) {
+        QRUtils.showNotification('Please enter content to encode', 'error');
+        return;
+    }
+
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    setLoading(submitButton, '<i class="fas fa-circle-notch fa-spin"></i> Generating...', '<i class="fas fa-qrcode"></i> Generate QR Code', true);
+    
+    try {
+        const response = await fetch('/generate_qr', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ content: content })
+        });
+        
+        const result = await response.json();
+
+        if (handleAuthRedirect(result)) return;
+        
+        if (result.success) {
+            lastGeneratedQrContent = result.qr_content;
+            // Display QR result
+            document.getElementById('qrId').textContent = result.qr_id;
+            document.getElementById('qrTimestamp').textContent = new Date(result.timestamp * 1000).toLocaleString();
+            document.getElementById('qrImageLink').href = result.image_url;
+            document.getElementById('qrImage').innerHTML = `
+                <div class="qr-placeholder">
+                    <img src="${result.image_url}" alt="Generated QR Code" class="generated-qr-image">
+                    <p>QR Code saved as: ${result.filename}</p>
+                    <p class="qr-content-preview">${result.qr_content.substring(0, 100)}...</p>
+                </div>
+            `;
+            document.getElementById('qrResult').style.display = 'block';
+            document.getElementById('verificationResult').style.display = 'none';
+            document.getElementById('qrContentToVerify').value = result.qr_content;
+            QRUtils.showNotification('QR code generated and loaded into verification box', 'success');
+            scrollToSection('qrResult');
+        } else {
+            QRUtils.showNotification('Error generating QR code: ' + result.message, 'error');
+        }
+    } catch (error) {
+        QRUtils.showNotification('Error: ' + error.message, 'error');
+    } finally {
+        setLoading(submitButton, '', '<i class="fas fa-qrcode"></i> Generate QR Code', false);
+    }
+});
+
+document.getElementById('verifyQrForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const qrContent = document.getElementById('qrContentToVerify').value;
+    
+    if (!qrContent.trim()) {
+        QRUtils.showNotification('Please enter QR code content to verify', 'error');
+        return;
+    }
+
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    setLoading(submitButton, '<i class="fas fa-circle-notch fa-spin"></i> Verifying...', '<i class="fas fa-check-circle"></i> Verify QR Code', true);
+    
+    try {
+        const response = await fetch('/verify_qr', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ qr_content: qrContent })
+        });
+        
+        const result = await response.json();
+
+        if (handleAuthRedirect(result)) return;
+        
+        if (result.success) {
+            const verification = result.verification;
+            const details = document.getElementById('verificationDetails');
+            
+            details.innerHTML = `
+                <div class="verification-item ${verification.valid ? 'valid' : 'invalid'}">
+                    <strong>Overall Status:</strong> 
+                    <span class="status-${verification.valid ? 'success' : 'error'}">
+                        ${verification.valid ? 'VALID' : 'INVALID'}
+                    </span>
+                </div>
+                <div class="verification-item ${verification.blockchain_valid ? 'valid' : 'invalid'}">
+                    <strong>Blockchain Verification:</strong> 
+                    <span class="status-${verification.blockchain_valid ? 'success' : 'error'}">
+                        ${verification.blockchain_valid ? 'PASSED' : 'FAILED'}
+                    </span>
+                </div>
+                <div class="verification-item ${verification.hash_valid ? 'valid' : 'invalid'}">
+                    <strong>Hash Integrity:</strong> 
+                    <span class="status-${verification.hash_valid ? 'success' : 'error'}">
+                        ${verification.hash_valid ? 'PASSED' : 'FAILED'}
+                    </span>
+                </div>
+                <div class="verification-item ${verification.user_device_valid ? 'valid' : 'invalid'}">
+                    <strong>User/Device Binding:</strong> 
+                    <span class="status-${verification.user_device_valid ? 'success' : 'error'}">
+                        ${verification.user_device_valid ? 'PASSED' : 'FAILED'}
+                    </span>
+                </div>
+                ${verification.qr_data ? `
+                    <div class="qr-data">
+                        <h4>QR Code Data:</h4>
+                        <p><strong>Content:</strong> ${verification.qr_data.content}</p>
+                        <p><strong>Created:</strong> ${new Date(verification.qr_data.timestamp * 1000).toLocaleString()}</p>
+                        <p><strong>QR ID:</strong> ${verification.qr_data.qr_id}</p>
+                    </div>
+                ` : ''}
+            `;
+            
+            document.getElementById('verificationResult').style.display = 'block';
+            document.getElementById('qrResult').style.display = 'block';
+            QRUtils.showNotification(
+                verification.valid ? 'Verification passed: QR is valid' : 'Verification failed: tampering or mismatch detected',
+                verification.valid ? 'success' : 'error'
+            );
+            scrollToSection('verificationResult');
+        } else {
+            QRUtils.showNotification('Error verifying QR code: ' + result.message, 'error');
+        }
+    } catch (error) {
+        QRUtils.showNotification('Error: ' + error.message, 'error');
+    } finally {
+        setLoading(submitButton, '', '<i class="fas fa-check-circle"></i> Verify QR Code', false);
+    }
+});
+
+document.getElementById('refreshBlockchain').addEventListener('click', async function() {
+    const button = this;
+    setLoading(button, '<i class="fas fa-circle-notch fa-spin"></i> Refreshing...', '<i class="fas fa-sync"></i> Refresh Status', true);
+    try {
+        const response = await fetch('/blockchain_status');
+        const result = await response.json();
+
+        if (handleAuthRedirect(result)) return;
+        
+        if (result.success) {
+            const status = document.getElementById('blockchainStatus');
+            status.innerHTML = `
+                <div class="blockchain-info">
+                    <div class="info-item">
+                        <strong>Total Blocks:</strong> ${result.blockchain.total_blocks}
+                    </div>
+                    <div class="info-item">
+                        <strong>Pending Transactions:</strong> ${result.blockchain.pending_transactions}
+                    </div>
+                    <div class="info-item">
+                        <strong>Latest Block Hash:</strong> 
+                        <code>${result.blockchain.latest_block_hash ? result.blockchain.latest_block_hash.substring(0, 20) + '...' : 'N/A'}</code>
+                    </div>
+                </div>
+            `;
+            QRUtils.showNotification('Blockchain status refreshed', 'success');
+        } else {
+            QRUtils.showNotification('Error fetching blockchain status: ' + result.message, 'error');
+        }
+    } catch (error) {
+        QRUtils.showNotification('Error: ' + error.message, 'error');
+    } finally {
+        setLoading(button, '', '<i class="fas fa-sync"></i> Refresh Status', false);
+    }
+});
+
+document.getElementById('copyQrContentBtn').addEventListener('click', async function() {
+    const fallbackText = document.getElementById('qrContentToVerify').value;
+    const textToCopy = lastGeneratedQrContent || fallbackText;
+    if (!textToCopy) {
+        QRUtils.showNotification('No QR content available to copy', 'error');
+        return;
+    }
+
+    const copied = await copyTextReliable(textToCopy);
+    if (copied) {
+        QRUtils.showNotification('QR content copied', 'success');
+    } else {
+        QRUtils.showNotification('Copy failed. Please copy manually.', 'error');
+    }
+});
+
+document.getElementById('sendToVerifyBtn').addEventListener('click', function() {
+    if (!lastGeneratedQrContent) {
+        QRUtils.showNotification('No generated QR content available yet', 'error');
+        return;
+    }
+
+    const verifyTextarea = document.getElementById('qrContentToVerify');
+    const verifyForm = document.getElementById('verifyQrForm');
+    verifyTextarea.value = lastGeneratedQrContent;
+    QRUtils.showNotification('QR content moved. Verifying now...', 'success');
+    scrollToSection('verifyQrForm');
+
+    setTimeout(() => {
+        verifyForm.requestSubmit();
+    }, 250);
+});
+
+document.getElementById('useLastGeneratedBtn').addEventListener('click', function() {
+    if (!lastGeneratedQrContent) {
+        QRUtils.showNotification('Generate a QR first to use this action', 'error');
+        return;
+    }
+
+    document.getElementById('qrContentToVerify').value = lastGeneratedQrContent;
+    QRUtils.showNotification('Loaded last generated QR content', 'success');
+});
+
+document.getElementById('reverifyBtn').addEventListener('click', function() {
+    const verifyText = document.getElementById('qrContentToVerify').value;
+    if (!verifyText.trim()) {
+        QRUtils.showNotification('Paste or edit QR content first', 'error');
+        return;
+    }
+    document.getElementById('verifyQrForm').requestSubmit();
+});
+
+// Load blockchain status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('refreshBlockchain').click();
+});
+</script>
+{% endblock %}

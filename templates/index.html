@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Blockchain QR Security System{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <div class="hero-content">
+        <h1 class="hero-title">
+            <i class="fas fa-shield-alt"></i>
+            Blockchain-Based Tamper-Proof QR Codes
+        </h1>
+        <p class="hero-subtitle">
+            Enhanced security with multi-factor authentication and decentralized verification
+        </p>
+        <div class="hero-features">
+            <div class="feature">
+                <i class="fas fa-lock"></i>
+                <h3>Tamper-Proof</h3>
+                <p>Blockchain verification prevents unauthorized modifications</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-key"></i>
+                <h3>Multi-Factor Auth</h3>
+                <p>Password, OTP, and device binding for maximum security</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-link"></i>
+                <h3>Decentralized</h3>
+                <p>No single point of failure with blockchain ledger</p>
+            </div>
+        </div>
+        <div class="hero-actions">
+            <a href="{{ url_for('register') }}" class="btn btn-primary">
+                <i class="fas fa-user-plus"></i> Get Started
+            </a>
+            <a href="{{ url_for('login') }}" class="btn btn-secondary">
+                <i class="fas fa-sign-in-alt"></i> Login
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="info-section">
+    <div class="container">
+        <h2 class="section-title">How It Works</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Register & Authenticate</h3>
+                <p>Create your account with multi-factor authentication including password, OTP, and device binding.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>Generate Secure QR</h3>
+                <p>Create QR codes with embedded security metadata stored on the blockchain for tamper detection.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Verify & Validate</h3>
+                <p>Scan and verify QR codes with real-time blockchain validation and integrity checks.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="security-section">
+    <div class="container">
+        <h2 class="section-title">Security Features</h2>
+        <div class="security-grid">
+            <div class="security-item">
+                <i class="fas fa-database"></i>
+                <h3>Blockchain Storage</h3>
+                <p>QR metadata stored on decentralized ledger prevents tampering</p>
+            </div>
+            <div class="security-item">
+                <i class="fas fa-fingerprint"></i>
+                <h3>Device Binding</h3>
+                <p>QR codes tied to specific devices for additional security</p>
+            </div>
+            <div class="security-item">
+                <i class="fas fa-clock"></i>
+                <h3>Time-based OTP</h3>
+                <p>One-time passwords with time-based expiration</p>
+            </div>
+            <div class="security-item">
+                <i class="fas fa-check-circle"></i>
+                <h3>Integrity Verification</h3>
+                <p>Hash-based verification ensures data hasn't been modified</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Blockchain QR Security System{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <i class="fas fa-sign-in-alt"></i>
+            <h2>Login</h2>
+            <p>Access your secure QR code system</p>
+        </div>
+        
+        <form id="loginForm" class="auth-form">
+            <div class="form-group">
+                <label for="user_id">
+                    <i class="fas fa-user"></i> User ID
+                </label>
+                <input type="text" id="user_id" name="user_id" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">
+                    <i class="fas fa-lock"></i> Password
+                </label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="device_id">
+                    <i class="fas fa-desktop"></i> Device ID
+                </label>
+                <input type="text" id="device_id" name="device_id" required>
+                <small class="field-hint">Tip: Use the Device ID shown after registration.</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="otp">
+                    <i class="fas fa-key"></i> One-Time Password (OTP)
+                </label>
+                <div class="otp-container">
+                    <input type="text" id="otp" name="otp" required placeholder="Enter 6-digit OTP">
+                    <button type="button" id="generateOtpBtn" class="btn btn-secondary" style="white-space: nowrap; min-width: 120px;">
+                        🔄 Generate OTP
+                    </button>
+                </div>
+                <small id="otpStatus" class="field-hint"></small>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-full">
+                <i class="fas fa-sign-in-alt"></i> Login
+            </button>
+        </form>
+        
+        <div class="auth-footer">
+            <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function getQueryParam(key) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(key);
+}
+
+function prefillLoginForm() {
+    const queryUser = getQueryParam('user_id');
+    const queryDevice = getQueryParam('device_id');
+    const storedUser = localStorage.getItem('last_user_id');
+    const storedDevice = localStorage.getItem('last_device_id');
+
+    const userInput = document.getElementById('user_id');
+    const deviceInput = document.getElementById('device_id');
+
+    if (queryUser || storedUser) userInput.value = queryUser || storedUser;
+    if (queryDevice || storedDevice) deviceInput.value = queryDevice || storedDevice;
+}
+
+function setOtpStatus(message, isError = false) {
+    const status = document.getElementById('otpStatus');
+    status.textContent = message;
+    status.style.color = isError ? '#dc3545' : '#667eea';
+}
+
+function setButtonLoading(button, isLoading, loadingText, defaultText) {
+    button.disabled = isLoading;
+    button.innerHTML = isLoading ? loadingText : defaultText;
+}
+
+function startOtpCountdown(seconds = 30) {
+    const btn = document.getElementById('generateOtpBtn');
+    let remaining = seconds;
+    btn.disabled = true;
+
+    const timer = setInterval(() => {
+        if (remaining <= 0) {
+            clearInterval(timer);
+            btn.disabled = false;
+            btn.innerHTML = '🔄 Generate OTP';
+            setOtpStatus('You can request a new OTP now.');
+            return;
+        }
+
+        btn.innerHTML = `⏳ Wait ${remaining}s`;
+        remaining -= 1;
+    }, 1000);
+}
+
+document.getElementById('generateOtpBtn').addEventListener('click', async function() {
+    const userId = document.getElementById('user_id').value;
+    const button = this;
+    
+    if (!userId) {
+        QRUtils.showNotification('Please enter User ID first', 'error');
+        return;
+    }
+
+    setButtonLoading(button, true, '⏳ Generating...', '🔄 Generate OTP');
+    setOtpStatus('Generating OTP...');
+    
+    try {
+        const response = await fetch('/generate_otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ user_id: userId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('otp').value = result.otp;
+            QRUtils.showNotification('OTP generated successfully', 'success');
+            setOtpStatus('OTP generated. It is valid for a short time.');
+            startOtpCountdown(30);
+        } else {
+            QRUtils.showNotification('Error generating OTP: ' + result.message, 'error');
+            setOtpStatus(result.message, true);
+            setButtonLoading(button, false, '', '🔄 Generate OTP');
+        }
+    } catch (error) {
+        QRUtils.showNotification('Error: ' + error.message, 'error');
+        setOtpStatus('Failed to generate OTP. Try again.', true);
+        setButtonLoading(button, false, '', '🔄 Generate OTP');
+    }
+});
+
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const data = Object.fromEntries(formData);
+    
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    setButtonLoading(submitButton, true, '<i class="fas fa-circle-notch fa-spin"></i> Logging in...', '<i class="fas fa-sign-in-alt"></i> Login');
+
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            localStorage.setItem('last_user_id', data.user_id);
+            localStorage.setItem('last_device_id', data.device_id);
+            QRUtils.showNotification('Login successful. Redirecting to dashboard...', 'success');
+            setTimeout(() => {
+                window.location.href = result.redirect_url || '/dashboard';
+            }, 700);
+        } else {
+            QRUtils.showNotification('Login failed: ' + result.message, 'error');
+            setButtonLoading(submitButton, false, '', '<i class="fas fa-sign-in-alt"></i> Login');
+        }
+    } catch (error) {
+        QRUtils.showNotification('Error: ' + error.message, 'error');
+        setButtonLoading(submitButton, false, '', '<i class="fas fa-sign-in-alt"></i> Login');
+    }
+});
+
+document.addEventListener('DOMContentLoaded', prefillLoginForm);
+</script>
+{% endblock %}
